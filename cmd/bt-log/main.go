@@ -12,11 +12,11 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
 	"github.com/haydentherapper/bt-log/internal/purl"
+	"github.com/haydentherapper/bt-log/internal/pypi"
 	f_log "github.com/transparency-dev/formats/log"
 	"github.com/transparency-dev/merkle/proof"
 	"github.com/transparency-dev/merkle/rfc6962"
@@ -72,42 +72,7 @@ func (e *PURLLogEntry) Unmarshal(u []byte) error {
 	return nil
 }
 
-type PyPILogEntry struct {
-	Filename string `json:"filename"` // e.g. pypi_attestations-0.0.27.tar.gz for source distributions or pypi_attestations-0.0.27-py3-none-any.whl for wheels
-	Checksum string `json:"checksum"` // e.g. sha256:5141b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be92
-	Identity string `json:"identity"` // e.g. https://github.com/octo-org/octo-automation/.github/workflows/oidc.yml@refs/heads/main
-}
-
-func (e PyPILogEntry) Marshal() ([]byte, error) {
-	if e.Filename == "" {
-		return nil, fmt.Errorf("filename empty")
-	}
-	if e.Checksum == "" {
-		return nil, fmt.Errorf("checksum empty")
-	}
-	if e.Identity != "" {
-		return []byte(fmt.Sprintf("%s\n%s\n%s", e.Filename, e.Checksum, e.Identity)), nil
-	} else {
-		return []byte(fmt.Sprintf("%s\n%s", e.Filename, e.Checksum)), nil
-	}
-}
-
-func (e *PyPILogEntry) Unmarshal(u []byte) error {
-	s := strings.Split(string(u), "\n")
-	switch len(s) {
-	case 2:
-		e.Filename = s[0]
-		e.Checksum = s[1]
-		return nil
-	case 3:
-		e.Filename = s[0]
-		e.Checksum = s[1]
-		e.Identity = s[2]
-		return nil
-	default:
-		return fmt.Errorf("incorrect encoding, must contain filename and checksum and optionally identity")
-	}
-}
+type PyPILogEntry = pypi.Entry
 
 type LogEntryResponse struct {
 	Index          uint64   `json:"index"`
@@ -187,8 +152,8 @@ func main() {
 
 	opts := tessera.NewAppendOptions().
 		WithCheckpointSigner(s).
-		WithCheckpointInterval(5*time.Second).
-		WithBatching(256, time.Second).
+		WithCheckpointInterval(time.Second).
+		WithBatching(1024, 100*time.Millisecond).
 		WithAntispam(256, nil)
 	if witness != nil {
 		opts = opts.WithWitnesses(tessera.NewWitnessGroup(1, witness), &tessera.WitnessOptions{FailOpen: false})
@@ -199,7 +164,7 @@ func main() {
 	}
 	addFn := appender.Add
 	tileFetcher := r.ReadTile
-	await := tessera.NewPublicationAwaiter(ctx, r.ReadCheckpoint, time.Second)
+	await := tessera.NewPublicationAwaiter(ctx, r.ReadCheckpoint, 200*time.Millisecond)
 
 	// Define a handler for /add that accepts POST requests and adds the POST body to the log
 	http.HandleFunc("POST /add", func(w http.ResponseWriter, r *http.Request) {

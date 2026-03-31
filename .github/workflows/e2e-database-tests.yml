@@ -44,7 +44,7 @@ jobs:
 
     - name: Verify upload and checkpoint
       run: |
-        curl -XPOST http://localhost:8080/add -d "{\"purl\":\"pkg:pypi/pkgname@1.2.3?checksum=sha256:5141b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be92\"}" -o bundle
+        curl -XPOST http://localhost:8080/add -d "{\"checksum\":\"sha256:5141b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be92\",\"filename\":\"pkgname-1.2.3-py3-none-any.whl\"}" -o bundle
         cat bundle
         cat bundle| jq -r .checkpoint | base64 -d
         index=$(cat bundle | jq -r .index)
