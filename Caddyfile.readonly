@@ -1,0 +1,6 @@
+:8088 {
+	@add path /add
+	respond @add 403
+
+	reverse_proxy {$BT_LOG_UPSTREAM}
+}

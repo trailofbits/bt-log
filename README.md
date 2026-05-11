@@ -121,7 +121,25 @@ Docker Compose values can be customized by copying `.env.example` to `.env` and 
 cp .env.example .env
 ```
 
-The most important values to customize are `LOG_ORIGIN` and `WITNESS_ORIGIN`, because they become part of the signed log and witness identities. You can also customize `BT_LOG_PORT` and `WITNESS_PORT`.
+The most important values to customize are `LOG_ORIGIN` and `WITNESS_ORIGIN`, because they become part of the signed log and witness identities. You can also customize `BT_LOG_PORT`, `WITNESS_PORT`, and the optional read-only proxy settings.
+
+The log and witness ports are bound to `127.0.0.1` by default. This keeps `/add` reachable from the host for local ingestion, but prevents direct access from the network.
+
+If you want to expose the log publicly, run the optional read-only proxy and expose `READONLY_PROXY_PORT` instead of `BT_LOG_PORT`. The read-only proxy blocks `/add` and proxies browser/status, checkpoint, and tile requests to the log.
+
+For example, with SQLite:
+
+```shell
+docker compose --profile sqlite --profile readonly-proxy up --wait
+```
+
+Then expose the read-only proxy port, for example:
+
+```shell
+tailscale funnel ${READONLY_PROXY_PORT:-8088}
+```
+
+Do not funnel `BT_LOG_PORT`, because that would expose `/add`.
 
 ### SQLite
 

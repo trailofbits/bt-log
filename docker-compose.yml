@@ -3,7 +3,7 @@ x-bt-log-base: &bt-log-base
     context: .
     dockerfile: Dockerfile.btlog
   ports:
-    - "${BT_LOG_PORT:-8080}:8080"
+    - "127.0.0.1:${BT_LOG_PORT:-8080}:8080"
   volumes:
     - bt-log:/home/app/log-storage
     - keys:/home/app/keys
@@ -14,7 +14,7 @@ x-witness-base: &witness-base
     context: .
     dockerfile: Dockerfile.witness
   ports:
-    - "${WITNESS_PORT:-8081}:8081"
+    - "127.0.0.1:${WITNESS_PORT:-8081}:8081"
   volumes:
     - keys:/home/app/keys
   healthcheck:
@@ -53,6 +53,19 @@ services:
     ]
     volumes:
       - keys:/home/app/keys
+  # Read-only proxy for public exposure. Expose this service with Tailscale
+  # Funnel or another public reverse proxy instead of exposing bt-log directly.
+  bt-log-readonly-proxy:
+    profiles: [readonly-proxy]
+    image: caddy:2
+    ports:
+      - "127.0.0.1:${READONLY_PROXY_PORT:-8088}:8088"
+    environment:
+      BT_LOG_UPSTREAM: ${BT_LOG_UPSTREAM:-bt-log-sqlite:8080}
+    volumes:
+      - ./Caddyfile.readonly:/etc/caddy/Caddyfile:ro
+    restart: always
+
   # --- SQLite Profile ---
   # Binary transparency log, with witnessed checkpoints
   bt-log-sqlite:
