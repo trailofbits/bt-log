@@ -3,7 +3,7 @@ x-bt-log-base: &bt-log-base
     context: .
     dockerfile: Dockerfile.btlog
   ports:
-    - "8080:8080"
+    - "${BT_LOG_PORT:-8080}:8080"
   volumes:
     - bt-log:/home/app/log-storage
     - keys:/home/app/keys
@@ -14,7 +14,7 @@ x-witness-base: &witness-base
     context: .
     dockerfile: Dockerfile.witness
   ports:
-    - "8081:8081"
+    - "${WITNESS_PORT:-8081}:8081"
   volumes:
     - keys:/home/app/keys
   healthcheck:
@@ -33,7 +33,7 @@ services:
       context: .
       dockerfile: Dockerfile.genkey
     command: [
-      "--origin=binarytransparency.log/example",
+      "--origin=${LOG_ORIGIN:-binarytransparency.log/example}",
       "--private-key-path=/home/app/keys/private.key",
       "--public-key-path=/home/app/keys/public.key",
     ]
@@ -47,7 +47,7 @@ services:
       context: .
       dockerfile: Dockerfile.genkey
     command: [
-      "--origin=witness.log/example",
+      "--origin=${WITNESS_ORIGIN:-witness.log/example}",
       "--private-key-path=/home/app/keys/witness-private.key",
       "--public-key-path=/home/app/keys/witness-public.key",
     ]

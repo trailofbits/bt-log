@@ -115,6 +115,14 @@ backend is supported.
 
 You'll need to pick a storage backend for the witness. SQLite, PostgreSQL and MySQL are supported.
 
+Docker Compose values can be customized by copying `.env.example` to `.env` and editing it before generating keys:
+
+```shell
+cp .env.example .env
+```
+
+The most important values to customize are `LOG_ORIGIN` and `WITNESS_ORIGIN`, because they become part of the signed log and witness identities. You can also customize `BT_LOG_PORT` and `WITNESS_PORT`.
+
 ### SQLite
 
 Run the following administrative jobs once to generate the log and witness keys and initialize the witness database:
