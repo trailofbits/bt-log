@@ -5,9 +5,9 @@ import (
 	"strings"
 )
 
-// Publisher represents a PEP 740 publish attestation signer.
+// Publisher represents a PEP 740 publish attestation identity.
 type Publisher struct {
-	Kind    string `json:"kind"`    // e.g. github, gitlab, google
+	Issuer  string `json:"issuer"`  // OIDC issuer URL from the publish attestation
 	Subject string `json:"subject"` // SAN of the signing certificate
 }
 
@@ -36,8 +36,20 @@ func (e Entry) Marshal() ([]byte, error) {
 	}
 	s := fmt.Sprintf("%s\n%s\n%s", versionHeader, e.Checksum, e.Filename)
 	if e.Publisher != nil {
+		if e.Publisher.Issuer == "" {
+			return nil, fmt.Errorf("publisher issuer empty")
+		}
+		if strings.Contains(e.Publisher.Issuer, "\n") {
+			return nil, fmt.Errorf("publisher issuer contains newline")
+		}
+		if e.Publisher.Subject == "" {
+			return nil, fmt.Errorf("publisher subject empty")
+		}
+		if strings.Contains(e.Publisher.Subject, "\n") {
+			return nil, fmt.Errorf("publisher subject contains newline")
+		}
 		s += fmt.Sprintf(
-			"\npublisher %s %s", e.Publisher.Kind, e.Publisher.Subject)
+			"\npublisher %s %s", e.Publisher.Issuer, e.Publisher.Subject)
 	}
 	return []byte(s), nil
 }
@@ -61,12 +73,12 @@ func (e *Entry) Unmarshal(u []byte) error {
 			return fmt.Errorf(
 				"invalid entry: fourth line must start with \"publisher \"")
 		}
-		kind, subject, found := strings.Cut(rest, " ")
+		issuer, subject, found := strings.Cut(rest, " ")
 		if !found {
 			return fmt.Errorf(
-				"invalid entry: publisher line must contain kind and subject")
+				"invalid entry: publisher line must contain issuer and subject")
 		}
-		e.Publisher = &Publisher{Kind: kind, Subject: subject}
+		e.Publisher = &Publisher{Issuer: issuer, Subject: subject}
 	}
 	return nil
 }

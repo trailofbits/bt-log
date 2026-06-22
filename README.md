@@ -13,14 +13,14 @@ The JSON request must contain a PyPI package filename and SHA-256 checksum:
 }
 ```
 
-An optional `publisher` object can be included for PEP 740 publish attestation signer metadata:
+An optional `publisher` object can be included for PEP 740 publish attestation identity metadata:
 
 ```json
 {
     "filename": "my_package-1.2.3-py3-none-any.whl",
     "checksum": "sha256:3b9730808f265c6d174662668435c4cf1fc9ddcd369831a646fa84bff8594f0c",
     "publisher": {
-        "kind": "github",
+        "issuer": "https://token.actions.githubusercontent.com",
         "subject": "https://github.com/example/project/.github/workflows/release.yml@refs/tags/v1.2.3"
     }
 }

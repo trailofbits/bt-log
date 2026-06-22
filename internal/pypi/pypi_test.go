@@ -22,7 +22,7 @@ func TestMarshalRoundTrip(t *testing.T) {
 				Checksum: "sha256:abcdef1234567890",
 				Filename: "urllib3-2.6.3-py3-none-any.whl",
 				Publisher: &Publisher{
-					Kind:    "github",
+					Issuer:  "https://token.actions.githubusercontent.com",
 					Subject: "repo:org/repo",
 				},
 			},
@@ -55,10 +55,10 @@ func TestMarshalRoundTrip(t *testing.T) {
 				if got.Publisher == nil {
 					t.Fatal("Publisher = nil, want non-nil")
 				}
-				if got.Publisher.Kind != tt.entry.Publisher.Kind {
-					t.Errorf("Publisher.Kind = %q, want %q",
-						got.Publisher.Kind,
-						tt.entry.Publisher.Kind)
+				if got.Publisher.Issuer != tt.entry.Publisher.Issuer {
+					t.Errorf("Publisher.Issuer = %q, want %q",
+						got.Publisher.Issuer,
+						tt.entry.Publisher.Issuer)
 				}
 				if got.Publisher.Subject != tt.entry.Publisher.Subject {
 					t.Errorf("Publisher.Subject = %q, want %q",
@@ -101,6 +101,24 @@ func TestMarshalErrors(t *testing.T) {
 				Filename: "foo\n.whl",
 			},
 			wantErr: "filename contains newline",
+		},
+		{
+			name: "empty publisher issuer",
+			entry: Entry{
+				Checksum:  "sha256:abc",
+				Filename:  "foo.whl",
+				Publisher: &Publisher{Subject: "repo:org/repo"},
+			},
+			wantErr: "publisher issuer empty",
+		},
+		{
+			name: "empty publisher subject",
+			entry: Entry{
+				Checksum:  "sha256:abc",
+				Filename:  "foo.whl",
+				Publisher: &Publisher{Issuer: "https://token.actions.githubusercontent.com"},
+			},
+			wantErr: "publisher subject empty",
 		},
 	}
 	for _, tt := range tests {
@@ -149,7 +167,7 @@ func TestUnmarshalErrors(t *testing.T) {
 			name: "publisher missing subject",
 			input: "pypi-transparency/v1\nsha256:abc\n" +
 				"foo.whl\npublisher github",
-			wantErr: "invalid entry: publisher line must contain kind and subject",
+			wantErr: "invalid entry: publisher line must contain issuer and subject",
 		},
 	}
 	for _, tt := range tests {
