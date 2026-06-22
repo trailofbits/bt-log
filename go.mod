@@ -3,7 +3,7 @@ module github.com/trailofbits/bt-log
 go 1.24.0
 
 require (
-	github.com/go-sql-driver/mysql v1.9.3
+	github.com/go-sql-driver/mysql v1.10.0
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/transparency-dev/formats v0.0.0-20250929095936-9974c5907dab
 	github.com/transparency-dev/merkle v0.0.2
@@ -13,7 +13,7 @@ require (
 )
 
 require (
-	filippo.io/edwards25519 v1.1.0 // indirect
+	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
