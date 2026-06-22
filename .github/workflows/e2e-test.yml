@@ -43,7 +43,7 @@ jobs:
 
       - name: Run log
         run: |
-          go run ./cmd/bt-log --storage-dir=/tmp/bt-log --private-key=private.key --public-key=public.key --entry-type=pypi --witness-url="http://localhost:8081" --witness-public-key=witness-public.key &
+          go run ./cmd/bt-log --storage-dir=/tmp/bt-log --private-key=private.key --public-key=public.key --witness-url="http://localhost:8081" --witness-public-key=witness-public.key &
 
       - name: Verify upload and output
         run: |
@@ -55,7 +55,7 @@ jobs:
 
       - name: Run monitor
         run: |
-          go run ./cmd/bt-log-monitor --log-url http://localhost:8080 --public-key public.key --storage-dir /tmp/monitor --once=true --entry-type=pypi --checksum-regex="sha256:5141b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be92" --filename-regex="pkgname" --json-logging 2>log-output
+          go run ./cmd/bt-log-monitor --log-url http://localhost:8080 --public-key public.key --storage-dir /tmp/monitor --once=true --checksum-regex="sha256:5141b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be92" --filename-regex="pkgname" --json-logging 2>log-output
           cat log-output
           checksum=$(cat log-output | jq -r .checksum)
           if [[ "$checksum" != "sha256:5141b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be92" ]]; then exit 1; else true; fi

@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/trailofbits/bt-log/internal/pypi"
-	"github.com/package-url/packageurl-go"
 	tlog "github.com/transparency-dev/formats/log"
 	"github.com/transparency-dev/merkle/proof"
 	"github.com/transparency-dev/merkle/rfc6962"
@@ -29,94 +28,20 @@ import (
 	"golang.org/x/mod/sumdb/note"
 )
 
-const (
-	entryTypePURL = "purl"
-	entryTypePyPI = "pypi"
-)
-
 var (
-	logURL             = flag.String("log-url", "", "Log URL")
-	pubKeyPath         = flag.String("public-key", "", "Path for log public key")
-	storageDir         = flag.String("storage-dir", "", "Directory to store last verified checkpoint")
-	once               = flag.Bool("once", true, "Whether to run in a loop or not")
-	frequency          = flag.Duration("frequency", time.Minute, "How often to run the monitor")
-	debug              = flag.Bool("debug", false, "Print additional information")
-	jsonLogging        = flag.Bool("json-logging", false, "Output log messages as JSON")
-	entryType          = flag.String("entry-type", entryTypePyPI, "Entry type: purl or pypi")
-	purlTypeRegex      = flag.String("purl-type-regex", "", "Regex to match pURL type. Must set all pURL regex if set")
-	purlNamespaceRegex = flag.String("purl-namespace-regex", "", "Regex to match pURL namespace. Must set all pURL regex if set")
-	purlNameRegex      = flag.String("purl-name-regex", "", "Regex to match pURL name. Must set all pURL regex if set")
-	purlVersionRegex   = flag.String("purl-version-regex", "", "Regex to match pURL version. Must set all pURL regex if set")
-	checksumRegex      = flag.String("checksum-regex", "", "Regex to match PyPI checksum")
-	filenameRegex      = flag.String("filename-regex", "", "Regex to match PyPI filename")
+	logURL        = flag.String("log-url", "", "Log URL")
+	pubKeyPath    = flag.String("public-key", "", "Path for log public key")
+	storageDir    = flag.String("storage-dir", "", "Directory to store last verified checkpoint")
+	once          = flag.Bool("once", true, "Whether to run in a loop or not")
+	frequency     = flag.Duration("frequency", time.Minute, "How often to run the monitor")
+	debug         = flag.Bool("debug", false, "Print additional information")
+	jsonLogging   = flag.Bool("json-logging", false, "Output log messages as JSON")
+	checksumRegex = flag.String("checksum-regex", "", "Regex to match PyPI checksum")
+	filenameRegex = flag.String("filename-regex", "", "Regex to match PyPI filename")
 )
 
 func errAttr(err error) slog.Attr {
 	return slog.Any("error", err)
-}
-
-func processPURLEntry(raw []byte, regexMatch bool, idHashMap map[string]string, ebIndex uint64, logSize uint64) {
-	// Parse pURL string
-	purl, err := packageurl.FromString(string(raw))
-	if err != nil {
-		slog.Error("error parsing pURL", "purl", string(raw), "tile-index", ebIndex, "log-size", logSize, errAttr(err))
-		return
-	}
-	slog.Debug("New entry", "purl", purl.String(), "tile-index", ebIndex, "log-size", logSize)
-
-	// Log if entry matches provided regex
-	if regexMatch {
-		typeMatch, err := regexp.MatchString(*purlTypeRegex, purl.Type)
-		if err != nil {
-			slog.Error("error matching pURL", "purl", purl.String(),
-				"matcher", "type", "value", purl.Type, "regex", *purlTypeRegex,
-				"tile-index", ebIndex, "log-size", logSize, errAttr(err))
-			return
-		}
-		namespaceMatch, err := regexp.MatchString(*purlNamespaceRegex, purl.Namespace)
-		if err != nil {
-			slog.Error("error matching pURL", "purl", purl.String(),
-				"matcher", "namespace", "value", purl.Namespace, "regex", *purlNamespaceRegex,
-				"tile-index", ebIndex, "log-size", logSize, errAttr(err))
-			return
-		}
-		nameMatch, err := regexp.MatchString(*purlNameRegex, purl.Name)
-		if err != nil {
-			slog.Error("error matching pURL", "purl", purl.String(),
-				"matcher", "name", "value", purl.Name, "regex", *purlNameRegex,
-				"tile-index", ebIndex, "log-size", logSize, errAttr(err))
-			return
-		}
-		versionMatch, err := regexp.MatchString(*purlVersionRegex, purl.Version)
-		if err != nil {
-			slog.Error("error matching pURL", "purl", purl.String(),
-				"matcher", "version", "value", purl.Version, "regex", *purlVersionRegex,
-				"tile-index", ebIndex, "log-size", logSize, errAttr(err))
-			return
-		}
-		if typeMatch && namespaceMatch && nameMatch && versionMatch {
-			slog.Info("Entry found", "purl", purl.String(), "tile-index", ebIndex, "log-size", logSize)
-		}
-	}
-
-	// Verify 1-1 mapping between package ID and checksum
-	checksum, ok := purl.Qualifiers.Map()["checksum"]
-	if !ok {
-		slog.Error("error getting checksum from pURL", "purl", purl.String(), "tile-index", ebIndex, "log-size", logSize)
-		return
-	}
-	purlWithoutChecksum := packageurl.NewPackageURL(purl.Type, purl.Namespace, purl.Name,
-		purl.Version, nil, "").ToString()
-	existing, found := idHashMap[purlWithoutChecksum]
-	if found && checksum != existing {
-		// Log if mapping is no longer 1-1
-		slog.Error(
-			fmt.Sprintf("ALERT: mismatched checksum for purl %s, got %s, expected %s",
-				purlWithoutChecksum, existing, checksum),
-			"purl", purl.String())
-		return
-	}
-	idHashMap[purlWithoutChecksum] = checksum
 }
 
 func processPyPIEntry(raw []byte, regexMatch bool, idHashMap map[string]string, ebIndex uint64, logSize uint64) {
@@ -195,11 +120,6 @@ func main() {
 		slog.Error("--storage-dir must be set")
 		os.Exit(1)
 	}
-	if *entryType != entryTypePURL && *entryType != entryTypePyPI {
-		slog.Error("--entry-type must be purl or pypi")
-		os.Exit(1)
-	}
-	purlRegexMatch := *purlTypeRegex != "" && *purlNamespaceRegex != "" && *purlNameRegex != "" && *purlVersionRegex != ""
 	pypiRegexMatch := *checksumRegex != "" || *filenameRegex != ""
 
 	ticker := time.NewTicker(*frequency)
@@ -319,12 +239,7 @@ func main() {
 			}
 			// Iterate over each entry in the bundle, which may be from a partial tile
 			for _, e := range entries.Entries[eb.First:] {
-				switch *entryType {
-				case entryTypePURL:
-					processPURLEntry(e, purlRegexMatch, idHashMap, eb.Index, latestCP.Size)
-				case entryTypePyPI:
-					processPyPIEntry(e, pypiRegexMatch, idHashMap, eb.Index, latestCP.Size)
-				}
+				processPyPIEntry(e, pypiRegexMatch, idHashMap, eb.Index, latestCP.Size)
 			}
 		}
 

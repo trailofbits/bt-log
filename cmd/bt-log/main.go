@@ -17,7 +17,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/trailofbits/bt-log/internal/purl"
 	"github.com/trailofbits/bt-log/internal/pypi"
 	f_log "github.com/transparency-dev/formats/log"
 	"github.com/transparency-dev/merkle/proof"
@@ -32,17 +31,10 @@ var (
 	host              = flag.String("host", "localhost", "host to listen on")
 	port              = flag.Uint("port", 8080, "port to listen on")
 	storageDir        = flag.String("storage-dir", "", "Root directory to store log data")
-	entryType         = flag.String("entry-type", "", "Specifies the log entry structure. Valid types are ["+EntryTypePURL+", "+EntryTypePyPI+"]")
-	purlType          = flag.String("purl-type", "", "Restricts pURLs to be of a specific type")
 	privKeyFile       = flag.String("private-key", "", "Location of private key file")
 	pubKeyFile        = flag.String("public-key", "", "Location of public key file")
 	witnessUrl        = flag.String("witness-url", "", "Optional witness to cosign checkpoint")
 	witnessPubKeyFile = flag.String("witness-public-key", "", "Optional witness public key location to verify cosignatures")
-)
-
-const (
-	EntryTypePURL = "purl"
-	EntryTypePyPI = "pypi"
 )
 
 func addCacheHeaders(value string, fs http.Handler) http.HandlerFunc {
@@ -50,28 +42,6 @@ func addCacheHeaders(value string, fs http.Handler) http.HandlerFunc {
 		w.Header().Add("Cache-Control", value)
 		fs.ServeHTTP(w, r)
 	}
-}
-
-type LogEntry interface {
-	Marshal() ([]byte, error)
-	Unmarshal([]byte) error
-}
-
-type PURLLogEntry struct {
-	PURL string `json:"purl"` // e.g. pkg:pypi/pkgname@1.2.3?checksum=sha256:5141b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be92
-	// TODO: Add registry, add filename
-}
-
-func (e PURLLogEntry) Marshal() ([]byte, error) {
-	if e.PURL == "" {
-		return nil, fmt.Errorf("package URL emtpy")
-	}
-	return []byte(e.PURL), nil
-}
-
-func (e *PURLLogEntry) Unmarshal(u []byte) error {
-	e.PURL = string(u)
-	return nil
 }
 
 type PyPILogEntry = pypi.Entry
@@ -84,8 +54,6 @@ type LogEntryResponse struct {
 
 type StatusPageData struct {
 	Origin              string
-	EntryType           string
-	PURLType            string
 	StorageDir          string
 	WitnessConfigured   bool
 	CheckpointAvailable bool
@@ -116,7 +84,7 @@ var statusPageTmpl = template.Must(template.New("status").Parse(`<!doctype html>
   <h1>bt-log status</h1>
   <table>
     <tr><th>Origin</th><td><code>{{.Origin}}</code></td></tr>
-    <tr><th>Entry type</th><td><code>{{.EntryType}}</code>{{if .PURLType}} / <code>{{.PURLType}}</code>{{end}}</td></tr>
+    <tr><th>Entry type</th><td><code>pypi</code></td></tr>
     <tr><th>Storage directory</th><td><code>{{.StorageDir}}</code></td></tr>
     <tr><th>Witness</th><td>{{if .WitnessConfigured}}configured{{else}}not configured{{end}}</td></tr>
     <tr><th>Generated at</th><td>{{.GeneratedAt}}</td></tr>
@@ -148,12 +116,6 @@ func main() {
 
 	if *storageDir == "" {
 		log.Fatalf("--storage-dir must be set")
-	}
-	if *entryType != EntryTypePURL && *entryType != EntryTypePyPI {
-		log.Fatalf("--entry-type must be set to either '%s' or '%s'", EntryTypePURL, EntryTypePyPI)
-	}
-	if *entryType == EntryTypePURL && *purlType == "" {
-		log.Fatalf("--purl-type must be set")
 	}
 	if *privKeyFile == "" {
 		log.Fatalf("--private-key must be set")
@@ -237,13 +199,9 @@ func main() {
 
 		data := StatusPageData{
 			Origin:            v.Name(),
-			EntryType:         *entryType,
 			StorageDir:        *storageDir,
 			WitnessConfigured: witness != nil,
 			GeneratedAt:       time.Now().UTC().Format(time.RFC3339),
-		}
-		if *entryType == EntryTypePURL {
-			data.PURLType = *purlType
 		}
 
 		rawCp, err := r.ReadCheckpoint(req.Context())
@@ -280,32 +238,15 @@ func main() {
 			return
 		}
 
-		// Parse request
-		var e LogEntry
-		switch *entryType {
-		case EntryTypePURL:
-			e = &PURLLogEntry{}
-		case EntryTypePyPI:
-			e = &PyPILogEntry{}
-		default:
-			// Shouldn't happen as we verify the entry type on server init
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
+		// Parse request as a PyPI entry.
+		e := &PyPILogEntry{}
 		if err := json.Unmarshal(b, e); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = w.Write([]byte(err.Error()))
 			return
 		}
 
-		if *entryType == EntryTypePURL {
-			if err := purl.VerifyPURL(e.(*PURLLogEntry).PURL, *purlType); err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				_, _ = w.Write([]byte(err.Error()))
-				return
-			}
-		}
-		// TODO: Verify PyPI as well - verify filename against regex, verify checksum
+		// TODO: Verify filename against regex, verify checksum.
 
 		m, err := e.Marshal()
 		if err != nil {

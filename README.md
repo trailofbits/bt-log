@@ -4,21 +4,16 @@ This repo contains an implementation of a transparency log for binary transparen
 for package registries.
 
 `cmd/bt-log` provides an HTTP server that accepts POST requests to an `/add` endpoint.
-The JSON request should contain a single string, a package identified by a
-[pURL](https://github.com/package-url/purl-spec/) string:
+The JSON request must contain a PyPI package filename and SHA-256 checksum:
 
 ```json
 {
-    "purl": "pkg:pypi/my-package@1.2.3?checksum=sha256:3b9730808f265c6d174662668435c4cf1fc9ddcd369831a646fa84bff8594f0c"
+    "filename": "my_package-1.2.3-py3-none-any.whl",
+    "checksum": "sha256:3b9730808f265c6d174662668435c4cf1fc9ddcd369831a646fa84bff8594f0c"
 }
 ```
 
-The pURL must contain:
-
-1. A pURL type that matches the name of the package registry, e.g. `pypi`, `gem`
-2. The name of a package. Namespace is optional
-3. The package version, e.g. `1.2.3`, `v1.2.3`
-4. A single qualifier containing the SHA 256 checksum
+An optional `publisher` object can be included for PEP 740 publish attestation signer metadata.
 
 The JSON response will include the index of the entry, the inclusion proof, and the checkpoint
 as per the [C2SP checkpoint spec](https://github.com/C2SP/C2SP/blob/main/tlog-checkpoint.md):
@@ -60,10 +55,9 @@ binarytransparency.log/example+5de0f997+AcPfp2roeTxqSqmPdDkA9rIAd0pe3C5Je6Rze2Sq
 Then, start the log:
 
 ```shell
-go run ./cmd/bt-log --storage-dir=/tmp/bt-log --private-key=private.key --public-key=public.key --entry-type=purl --purl-type=pypi
+go run ./cmd/bt-log --storage-dir=/tmp/bt-log --private-key=private.key --public-key=public.key
 ```
 
-Replace `--purl-type` with the name of the package registry.
 
 ### Witnessing
 
@@ -93,13 +87,13 @@ go run ./cmd/witness-server --database-path witness.db --private-key witness-pri
 Then, start the log. The log will verify cosigned checkpoints using the provided witness verification key.
 
 ```shell
-go run ./cmd/bt-log --storage-dir=/tmp/bt-log --private-key=private.key --public-key=public.key --entry-type=purl --purl-type=pypi --witness-url="http://localhost:8081" --witness-public-key=witness-public.key
+go run ./cmd/bt-log --storage-dir=/tmp/bt-log --private-key=private.key --public-key=public.key --witness-url="http://localhost:8081" --witness-public-key=witness-public.key
 ```
 
 The checkpoint in the log's response will contain a co-signed checkpoint:
 
 ```shell
-curl -XPOST http://localhost:8080/add -d "{\"purl\":\"pkg:pypi/pkgname@1.2.3?checksum=sha256:5141b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be92\"}" -o bundle
+curl -XPOST http://localhost:8080/add -d "{\"filename\":\"pkgname-1.2.3-py3-none-any.whl\",\"checksum\":\"sha256:5141b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be92\"}" -o bundle
 
 cat bundle | jq -r .checkpoint | base64 -d
 ```
