@@ -1,4 +1,4 @@
-module github.com/haydentherapper/bt-log
+module github.com/trailofbits/bt-log
 
 go 1.24.0
 

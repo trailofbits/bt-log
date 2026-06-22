@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/haydentherapper/bt-log/internal/db/postgres"
+	"github.com/trailofbits/bt-log/internal/db/postgres"
 	tlog "github.com/transparency-dev/formats/log"
 	f_note "github.com/transparency-dev/formats/note"
 	"github.com/transparency-dev/merkle/proof"

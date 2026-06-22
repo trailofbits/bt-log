@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/haydentherapper/bt-log/internal/key"
+	"github.com/trailofbits/bt-log/internal/key"
 	"golang.org/x/mod/sumdb/note"
 )
 

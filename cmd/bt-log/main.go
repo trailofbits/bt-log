@@ -17,8 +17,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/haydentherapper/bt-log/internal/purl"
-	"github.com/haydentherapper/bt-log/internal/pypi"
+	"github.com/trailofbits/bt-log/internal/purl"
+	"github.com/trailofbits/bt-log/internal/pypi"
 	f_log "github.com/transparency-dev/formats/log"
 	"github.com/transparency-dev/merkle/proof"
 	"github.com/transparency-dev/merkle/rfc6962"

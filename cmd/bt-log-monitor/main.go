@@ -19,7 +19,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/haydentherapper/bt-log/internal/pypi"
+	"github.com/trailofbits/bt-log/internal/pypi"
 	"github.com/package-url/packageurl-go"
 	tlog "github.com/transparency-dev/formats/log"
 	"github.com/transparency-dev/merkle/proof"

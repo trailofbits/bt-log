@@ -9,7 +9,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/haydentherapper/bt-log/internal/db/postgres"
+	"github.com/trailofbits/bt-log/internal/db/postgres"
 	"golang.org/x/mod/sumdb/note"
 
 	_ "github.com/go-sql-driver/mysql"
