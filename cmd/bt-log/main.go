@@ -136,6 +136,7 @@ var statusPageTmpl = template.Must(template.New("status").Parse(`<!doctype html>
 
   <h2>Links</h2>
   <ul>
+    <li><a href="/.well-known/public-key">/.well-known/public-key</a></li>
     <li><a href="/checkpoint">/checkpoint</a></li>
     <li><a href="/tile/">/tile/</a></li>
   </ul>
@@ -264,6 +265,11 @@ func main() {
 		if err := statusPageTmpl.Execute(w, data); err != nil {
 			log.Printf("status page: %v", err)
 		}
+	})
+
+	http.HandleFunc("GET /.well-known/public-key", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write(pubKey)
 	})
 
 	// Define a handler for /add that accepts POST requests and adds the POST body to the log
