@@ -18,7 +18,7 @@ type Entry struct {
 	Publisher *Publisher `json:"publisher,omitempty"` // optional
 }
 
-const versionHeader = "pypi-transparency/v1"
+const EntryType = "pypi-transparency/v1"
 
 // Marshal serializes the entry to the log wire format.
 func (e Entry) Marshal() ([]byte, error) {
@@ -34,7 +34,7 @@ func (e Entry) Marshal() ([]byte, error) {
 	if strings.Contains(e.Filename, "\n") {
 		return nil, fmt.Errorf("filename contains newline")
 	}
-	s := fmt.Sprintf("%s\n%s\n%s", versionHeader, e.Checksum, e.Filename)
+	s := fmt.Sprintf("%s\n%s\n%s", EntryType, e.Checksum, e.Filename)
 	if e.Publisher != nil {
 		if e.Publisher.Issuer == "" {
 			return nil, fmt.Errorf("publisher issuer empty")
@@ -61,7 +61,7 @@ func (e *Entry) Unmarshal(u []byte) error {
 		return fmt.Errorf(
 			"invalid entry: expected 3 or 4 lines, got %d", len(lines))
 	}
-	if lines[0] != versionHeader {
+	if lines[0] != EntryType {
 		return fmt.Errorf(
 			"invalid entry: unrecognized version %q", lines[0])
 	}

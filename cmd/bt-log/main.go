@@ -54,6 +54,7 @@ type LogEntryResponse struct {
 
 type StatusPageData struct {
 	Origin              string
+	EntryType           string
 	StorageDir          string
 	WitnessConfigured   bool
 	CheckpointAvailable bool
@@ -84,7 +85,7 @@ var statusPageTmpl = template.Must(template.New("status").Parse(`<!doctype html>
   <h1>bt-log status</h1>
   <table>
     <tr><th>Origin</th><td><code>{{.Origin}}</code></td></tr>
-    <tr><th>Entry type</th><td><code>pypi</code></td></tr>
+    <tr><th>Entry type</th><td><code>{{.EntryType}}</code></td></tr>
     <tr><th>Storage directory</th><td><code>{{.StorageDir}}</code></td></tr>
     <tr><th>Witness</th><td>{{if .WitnessConfigured}}configured{{else}}not configured{{end}}</td></tr>
     <tr><th>Generated at</th><td>{{.GeneratedAt}}</td></tr>
@@ -199,6 +200,7 @@ func main() {
 
 		data := StatusPageData{
 			Origin:            v.Name(),
+			EntryType:         pypi.EntryType,
 			StorageDir:        *storageDir,
 			WitnessConfigured: witness != nil,
 			GeneratedAt:       time.Now().UTC().Format(time.RFC3339),
