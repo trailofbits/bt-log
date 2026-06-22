@@ -1,10 +1,10 @@
-# Binary Transparency for Package Registries
+# Binary Transparency for Python Package Indexes
 
 This repo contains an implementation of a transparency log for binary transparency
-for package registries.
+for PyPI and other Python package indexes.
 
 `cmd/bt-log` provides an HTTP server that accepts POST requests to an `/add` endpoint.
-The JSON request must contain a PyPI package filename and SHA-256 checksum:
+The JSON request must contain a Python distribution filename and SHA-256 checksum:
 
 ```json
 {
