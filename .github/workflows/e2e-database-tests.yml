@@ -32,15 +32,15 @@ jobs:
         go-version-file: go.mod
 
     - name: Build docker images
-      run: docker compose --profile admin --profile ${{ matrix.db }} build
+      run: docker compose -f deploy/docker-compose.yml --profile admin --profile ${{ matrix.db }} build
 
     - name: Generate log and witness keys
       run: |
-        docker compose run gen-key-log
-        docker compose run gen-key-witness
+        docker compose -f deploy/docker-compose.yml run gen-key-log
+        docker compose -f deploy/docker-compose.yml run gen-key-witness
 
     - name: Start services
-      run: docker compose --profile ${{ matrix.db }} up --wait
+      run: docker compose -f deploy/docker-compose.yml --profile ${{ matrix.db }} up --wait
 
     - name: Verify upload and checkpoint
       run: |
@@ -52,8 +52,8 @@ jobs:
 
     - name: Check container logs on failure
       if: failure()
-      run: docker compose --profile ${{ matrix.db }} logs
+      run: docker compose -f deploy/docker-compose.yml --profile ${{ matrix.db }} logs
 
     - name: Tear down services
       if: always()
-      run: docker compose --profile ${{ matrix.db }} down --volumes --remove-orphans
+      run: docker compose -f deploy/docker-compose.yml --profile ${{ matrix.db }} down --volumes --remove-orphans

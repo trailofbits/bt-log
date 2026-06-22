@@ -18,7 +18,7 @@ updates:
           - "patch"
   - package-ecosystem: "docker"
     directories:
-      - "/"
+      - "/deploy"
     schedule:
       interval: "weekly"
     groups:
@@ -27,7 +27,7 @@ updates:
           - "patch"
   - package-ecosystem: "docker-compose"
     directories:
-      - "/"
+      - "/deploy"
     schedule:
       interval: "weekly"
     groups:

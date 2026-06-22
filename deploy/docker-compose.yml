@@ -1,7 +1,7 @@
 x-bt-log-base: &bt-log-base
   build:
-    context: .
-    dockerfile: Dockerfile.btlog
+    context: ..
+    dockerfile: deploy/Dockerfile.btlog
   ports:
     - "127.0.0.1:${BT_LOG_PORT:-8080}:8080"
   volumes:
@@ -11,8 +11,8 @@ x-bt-log-base: &bt-log-base
 
 x-witness-base: &witness-base
   build:
-    context: .
-    dockerfile: Dockerfile.witness
+    context: ..
+    dockerfile: deploy/Dockerfile.witness
   ports:
     - "127.0.0.1:${WITNESS_PORT:-8081}:8081"
   volumes:
@@ -30,8 +30,8 @@ services:
   gen-key-log:
     profiles: [admin]
     build:
-      context: .
-      dockerfile: Dockerfile.genkey
+      context: ..
+      dockerfile: deploy/Dockerfile.genkey
     command: [
       "--origin=${LOG_ORIGIN:-binarytransparency.log/example}",
       "--private-key-path=/home/app/keys/private.key",
@@ -44,8 +44,8 @@ services:
   gen-key-witness:
     profiles: [admin]
     build:
-      context: .
-      dockerfile: Dockerfile.genkey
+      context: ..
+      dockerfile: deploy/Dockerfile.genkey
     command: [
       "--origin=${WITNESS_ORIGIN:-witness.log/example}",
       "--private-key-path=/home/app/keys/witness-private.key",
@@ -106,8 +106,8 @@ services:
   init-witness-sqlite:
     profiles: [sqlite]
     build:
-      context: .
-      dockerfile: Dockerfile.initwitness
+      context: ..
+      dockerfile: deploy/Dockerfile.initwitness
     command: [
       "--database-path=/home/app/witness/witness.db",
       "--public-key=/home/app/keys/public.key"
@@ -166,8 +166,8 @@ services:
   init-witness-mysql:
     profiles: [mysql]
     build:
-      context: .
-      dockerfile: Dockerfile.initwitness
+      context: ..
+      dockerfile: deploy/Dockerfile.initwitness
     command: [
       "--db-type=mysql",
       "--db-dsn=witnessuser:witnesspassword@tcp(mysql:3306)/witnessdb",
@@ -228,8 +228,8 @@ services:
   init-witness-postgres:
     profiles: [postgres]
     build:
-      context: .
-      dockerfile: Dockerfile.initwitness
+      context: ..
+      dockerfile: deploy/Dockerfile.initwitness
     command: [
       "--db-type=postgres",
       "--db-dsn=postgres://witnessuser:witnesspassword@postgres:5432/witnessdb?sslmode=disable",

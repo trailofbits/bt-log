@@ -113,113 +113,15 @@ The signed checkpoint will have two signatures, one from the log and one from th
 
 ## Docker Deployment
 
-Using the provided Docker Compose file, you can initialize and deploy the log and witness.
-
-For the log, only the [Tessera POSIX](https://github.com/transparency-dev/tessera/tree/main/storage/posix)
-backend is supported.
-
-You'll need to pick a storage backend for the witness. SQLite, PostgreSQL and MySQL are supported.
-
-Docker Compose values can be customized by copying `.env.example` to `.env` and editing it before generating keys:
-
-```shell
-cp .env.example .env
-```
-
-The most important values to customize are `LOG_ORIGIN` and `WITNESS_ORIGIN`, because they become part of the signed log and witness identities. You can also customize `BT_LOG_PORT`, `WITNESS_PORT`, and the optional read-only proxy settings.
-
-The log and witness ports are bound to `127.0.0.1` by default. This keeps `/add` reachable from the host for local ingestion, but prevents direct access from the network.
-
-If you want to expose the log publicly, run the optional read-only proxy and expose `READONLY_PROXY_PORT` instead of `BT_LOG_PORT`. The read-only proxy blocks `/add` and proxies browser/status, checkpoint, and tile requests to the log.
-
-For example, with SQLite:
-
-```shell
-docker compose --profile sqlite --profile readonly-proxy up --wait
-```
-
-Then expose the read-only proxy port, for example:
-
-```shell
-tailscale funnel ${READONLY_PROXY_PORT:-8088}
-```
-
-Do not funnel `BT_LOG_PORT`, because that would expose `/add`.
-
-### SQLite
-
-Run the following administrative jobs once to generate the log and witness keys and initialize the witness database:
-
-```shell
-docker compose --profile admin --profile sqlite build
-docker compose run gen-key-log
-docker compose run gen-key-witness
-```
-
-Run the log and witness:
-
-```shell
-docker compose --profile sqlite up --wait
-```
-
-To clean up containers and volumes:
-
-```shell
-docker compose --profile sqlite down --remove-orphans --volumes
-```
-
-### PostgreSQL
-
-Run the following administrative jobs once to generate the log and witness keys and initialize the witness database:
-
-```shell
-docker compose --profile admin --profile postgres build
-docker compose run gen-key-log
-docker compose run gen-key-witness
-```
-
-Run the log and witness:
-
-```shell
-docker compose --profile postgres up --wait
-```
-
-To clean up containers and volumes:
-
-```shell
-docker compose --profile postgres down --remove-orphans --volumes
-```
-
-### MySQL
-
-Run the following administrative jobs once to generate the log and witness keys and initialize the witness database:
-
-```shell
-docker compose --profile admin --profile mysql build
-docker compose run gen-key-log
-docker compose run gen-key-witness
-```
-
-Run the log and witness:
-
-```shell
-docker compose --profile mysql up --wait
-```
-
-To clean up containers and volumes:
-
-```shell
-docker compose --profile mysql down --remove-orphans --volumes
-```
+Deployment-related files and docs live in [`deploy/`](deploy/). See [`deploy/README.md`](deploy/README.md) for Docker Compose instructions.
 
 ## Upcoming Work
 
-* [ ] Change pURL to a custom representation
 * [ ] Lightweight monitor to demonstrate verifying ID-hash mapping is always 1-1 and alerting on publication
   * [x] ID-hash mapping verification
   * [x] Regex to match entries
   * [x] Use slog for output
-  * [ ] Transform pURL to entry, request entry from registry, compare hash
+  * [ ] Request PyPI file from registry and compare hash
   * [x] Add e2e to GHA script
 * [ ] Add unit tests
 * [x] Containerize for e2e tests
