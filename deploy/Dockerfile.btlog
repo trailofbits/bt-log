@@ -1,4 +1,4 @@
-FROM golang:1.25.2@sha256:1c91b4f4391774a73d6489576878ad3ff3161ebc8c78466ec26e83474855bfcf AS build
+FROM golang:1.26.4@sha256:792443b89f65105abba56b9bd5e97f680a80074ac62fc844a584212f8c8102c3 AS build
 
 WORKDIR /build
 
@@ -8,7 +8,7 @@ RUN go mod download && go mod verify
 COPY . .
 RUN CGO_ENABLED=0 go build -v -o ./bt-log ./cmd/bt-log
 
-FROM golang:1.25.2@sha256:1c91b4f4391774a73d6489576878ad3ff3161ebc8c78466ec26e83474855bfcf
+FROM golang:1.26.4@sha256:792443b89f65105abba56b9bd5e97f680a80074ac62fc844a584212f8c8102c3
 
 WORKDIR /home/app
 
