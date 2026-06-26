@@ -161,7 +161,7 @@ def init_db(db_path: str) -> sqlite3.Connection:
             provenance_status     TEXT NOT NULL DEFAULT 'unchecked',
             provenance_checked_at TEXT,
             provenance_error      TEXT,
-            UNIQUE(filename, sha256_digest)
+            UNIQUE(filename)
         )
     """)
     conn.execute("""
@@ -170,7 +170,7 @@ def init_db(db_path: str) -> sqlite3.Connection:
             sha256_digest TEXT NOT NULL,
             logged_at     TEXT NOT NULL,
             log_index     TEXT,
-            UNIQUE(filename, sha256_digest)
+            UNIQUE(filename)
         )
     """)
     conn.execute("""
@@ -180,6 +180,8 @@ def init_db(db_path: str) -> sqlite3.Connection:
         )
     """)
     _migrate_entries(conn)
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_entries_filename_unique ON entries (filename)")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_logged_entries_filename_unique ON logged_entries (filename)")
     conn.commit()
     return conn
 
@@ -762,8 +764,8 @@ def entry_payload(entry: LogEntry) -> dict:
 
 def is_logged(conn: sqlite3.Connection, filename: str, sha256_digest: str) -> bool:
     row = conn.execute(
-        "SELECT 1 FROM logged_entries WHERE filename = ? AND sha256_digest = ?",
-        (filename, sha256_digest),
+        "SELECT 1 FROM logged_entries WHERE filename = ?",
+        (filename,),
     ).fetchone()
     return row is not None
 
@@ -773,7 +775,8 @@ def record_logged(conn: sqlite3.Connection, entry: LogEntry, log_index: int | No
     conn.execute(
         """INSERT INTO logged_entries (filename, sha256_digest, logged_at, log_index)
            VALUES (?, ?, ?, ?)
-           ON CONFLICT(filename, sha256_digest) DO UPDATE SET
+           ON CONFLICT(filename) DO UPDATE SET
+             sha256_digest = excluded.sha256_digest,
              logged_at = excluded.logged_at,
              log_index = excluded.log_index""",
         (entry.filename, entry.sha256_digest, logged_at, str(log_index) if log_index is not None else None),
@@ -788,10 +791,10 @@ def load_unlogged_entries(conn: sqlite3.Connection, max_entries: int | None = No
                   e.publisher_kind, e.publisher_subject
            FROM entries e
            LEFT JOIN logged_entries l
-             ON l.filename = e.filename AND l.sha256_digest = e.sha256_digest
+             ON l.filename = e.filename
            WHERE l.filename IS NULL
              AND e.provenance_status IN ('found', 'none')
-           ORDER BY e.upload_time ASC, e.filename ASC, e.sha256_digest ASC""" + limit
+           ORDER BY e.upload_time ASC, e.filename ASC""" + limit
     ).fetchall()
     entries = []
     for filename, digest, upload_time, pub_kind, pub_subject in rows:
