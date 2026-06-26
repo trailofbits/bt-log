@@ -28,7 +28,7 @@ The log and witness ports are bound to `127.0.0.1` by default. This keeps `/add`
 
 If you want to expose the log publicly, run the optional read-only proxy and expose `READONLY_PROXY_PORT` instead of `BT_LOG_PORT`. The read-only proxy blocks `/add` and proxies browser/status, checkpoint, and tile requests to the log.
 
-For example, with SQLite:
+Before running any backend profile, generate the log and witness keys once using the administrative commands in the backend section below. For example, with SQLite, run the SQLite administrative commands first, then start SQLite with the read-only proxy:
 
 ```shell
 docker compose --env-file deploy/.env -f deploy/docker-compose.yml --profile sqlite --profile readonly-proxy up --wait
@@ -44,7 +44,7 @@ Do not funnel `BT_LOG_PORT`, because that would expose `/add`.
 
 ## SQLite
 
-Run the following administrative jobs once to generate the log and witness keys and initialize the witness database:
+Run the following administrative jobs once to generate the log and witness keys. The `up --wait` command below initializes the witness database from the generated log public key:
 
 ```shell
 docker compose --env-file deploy/.env -f deploy/docker-compose.yml --profile admin --profile sqlite build
@@ -66,7 +66,7 @@ docker compose --env-file deploy/.env -f deploy/docker-compose.yml --profile sql
 
 ## PostgreSQL
 
-Run the following administrative jobs once to generate the log and witness keys and initialize the witness database:
+Run the following administrative jobs once to generate the log and witness keys. The `up --wait` command below initializes the witness database from the generated log public key:
 
 ```shell
 docker compose --env-file deploy/.env -f deploy/docker-compose.yml --profile admin --profile postgres build
@@ -88,7 +88,7 @@ docker compose --env-file deploy/.env -f deploy/docker-compose.yml --profile pos
 
 ## MySQL
 
-Run the following administrative jobs once to generate the log and witness keys and initialize the witness database:
+Run the following administrative jobs once to generate the log and witness keys. The `up --wait` command below initializes the witness database from the generated log public key:
 
 ```shell
 docker compose --env-file deploy/.env -f deploy/docker-compose.yml --profile admin --profile mysql build
