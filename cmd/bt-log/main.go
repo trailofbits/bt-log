@@ -65,6 +65,12 @@ type StatusPageData struct {
 	GeneratedAt         string
 }
 
+func writeJSONError(w http.ResponseWriter, status int, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
 var statusPageTmpl = template.Must(template.New("status").Parse(`<!doctype html>
 <html lang="en">
 <head>
@@ -236,15 +242,14 @@ func main() {
 	http.HandleFunc("POST /add", func(w http.ResponseWriter, r *http.Request) {
 		b, err := io.ReadAll(r.Body)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
 		// Parse request as a PyPI entry.
 		e := &PyPILogEntry{}
 		if err := json.Unmarshal(b, e); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write([]byte(err.Error()))
+			writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 
@@ -252,41 +257,35 @@ func main() {
 
 		m, err := e.Marshal()
 		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write([]byte(err.Error()))
+			writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 
 		f := addFn(r.Context(), tessera.NewEntry(m))
 		idx, rawCp, err := await.Await(ctx, f)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = w.Write([]byte(err.Error()))
+			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		cp, _, _, err := f_log.ParseCheckpoint(rawCp, v.Name(), v)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = w.Write([]byte(err.Error()))
+			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		pb, err := client.NewProofBuilder(ctx, cp.Size, tileFetcher)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = w.Write([]byte(err.Error()))
+			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		inclusionProof, err := pb.InclusionProof(ctx, idx.Index)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = w.Write([]byte(err.Error()))
+			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		// make sure the proof is valid
 		leafHash := rfc6962.DefaultHasher.HashLeaf(m)
 		if err := proof.VerifyInclusion(rfc6962.DefaultHasher, idx.Index, cp.Size, leafHash, inclusionProof, cp.Hash); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = w.Write([]byte(err.Error()))
+			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
@@ -298,8 +297,7 @@ func main() {
 
 		jResp, err := json.Marshal(resp)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = w.Write([]byte(err.Error()))
+			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		if _, err = w.Write(jResp); err != nil {
