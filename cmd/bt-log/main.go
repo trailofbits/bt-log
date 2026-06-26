@@ -10,6 +10,7 @@ import (
 	"html/template"
 	"io"
 	"log"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
@@ -28,13 +29,16 @@ import (
 )
 
 var (
-	host              = flag.String("host", "localhost", "host to listen on")
-	port              = flag.Uint("port", 8080, "port to listen on")
-	storageDir        = flag.String("storage-dir", "", "Root directory to store log data")
-	privKeyFile       = flag.String("private-key", "", "Location of private key file")
-	pubKeyFile        = flag.String("public-key", "", "Location of public key file")
-	witnessUrl        = flag.String("witness-url", "", "Optional witness to cosign checkpoint")
-	witnessPubKeyFile = flag.String("witness-public-key", "", "Optional witness public key location to verify cosignatures")
+	host                     = flag.String("host", "localhost", "host to listen on")
+	port                     = flag.Uint("port", 8080, "port to listen on")
+	storageDir               = flag.String("storage-dir", "", "Root directory to store log data")
+	privKeyFile              = flag.String("private-key", "", "Location of private key file")
+	pubKeyFile               = flag.String("public-key", "", "Location of public key file")
+	witnessUrl               = flag.String("witness-url", "", "Optional witness to cosign checkpoint")
+	witnessPubKeyFile        = flag.String("witness-public-key", "", "Optional witness public key location to verify cosignatures")
+	bulkAppendWorkersFlag    = flag.Uint("bulk-append-workers", 8192, "Maximum concurrent workers for /admin/bulk/append")
+	bulkAppendMaxEntriesFlag = flag.Uint("bulk-append-max-entries", 50000, "Maximum entries accepted per /admin/bulk/append request")
+	bulkAppendPublishTimeout = flag.Duration("bulk-append-publish-timeout", 30*time.Second, "Maximum time to wait for bulk appended entries to be published")
 )
 
 func addCacheHeaders(value string, fs http.Handler) http.HandlerFunc {
@@ -195,8 +199,9 @@ func main() {
 		log.Fatalf("failed to create appender: %v", err)
 	}
 	addFn := appender.Add
-	tileFetcher := r.ReadTile
-	await := tessera.NewPublicationAwaiter(ctx, r.ReadCheckpoint, 200*time.Millisecond)
+	logReader := r
+	tileFetcher := logReader.ReadTile
+	await := tessera.NewPublicationAwaiter(ctx, logReader.ReadCheckpoint, 200*time.Millisecond)
 
 	http.HandleFunc("GET /", func(w http.ResponseWriter, req *http.Request) {
 		if req.URL.Path != "/" {
@@ -212,7 +217,7 @@ func main() {
 			GeneratedAt:       time.Now().UTC().Format(time.RFC3339),
 		}
 
-		rawCp, err := r.ReadCheckpoint(req.Context())
+		rawCp, err := logReader.ReadCheckpoint(req.Context())
 		if err != nil {
 			data.CheckpointError = err.Error()
 		} else {
@@ -238,7 +243,7 @@ func main() {
 		_, _ = w.Write(pubKey)
 	})
 
-	// Define a handler for /add that accepts POST requests and adds the POST body to the log
+	// Define a handler for /add that accepts POST requests and adds the POST body to the log.
 	http.HandleFunc("POST /add", func(w http.ResponseWriter, r *http.Request) {
 		b, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -246,7 +251,6 @@ func main() {
 			return
 		}
 
-		// Parse request as a PyPI entry.
 		e := &PyPILogEntry{}
 		if err := json.Unmarshal(b, e); err != nil {
 			writeJSONError(w, http.StatusBadRequest, err.Error())
@@ -272,38 +276,63 @@ func main() {
 			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		pb, err := client.NewProofBuilder(ctx, cp.Size, tileFetcher)
+		pb, err := client.NewProofBuilder(r.Context(), cp.Size, tileFetcher)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		inclusionProof, err := pb.InclusionProof(ctx, idx.Index)
+		inclusionProof, err := pb.InclusionProof(r.Context(), idx.Index)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		// make sure the proof is valid
 		leafHash := rfc6962.DefaultHasher.HashLeaf(m)
 		if err := proof.VerifyInclusion(rfc6962.DefaultHasher, idx.Index, cp.Size, leafHash, inclusionProof, cp.Hash); err != nil {
 			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		_ = json.NewEncoder(w).Encode(LogEntryResponse{Index: idx.Index, InclusionProof: inclusionProof, Checkpoint: rawCp})
+	})
 
-		resp := LogEntryResponse{
-			Index:          idx.Index,
-			InclusionProof: inclusionProof,
-			Checkpoint:     rawCp,
-		}
-
-		jResp, err := json.Marshal(resp)
-		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, err.Error())
+	http.HandleFunc("POST /admin/bulk/append", func(w http.ResponseWriter, req *http.Request) {
+		contentType, _, err := mime.ParseMediaType(req.Header.Get("Content-Type"))
+		if err != nil || contentType != "application/x-ndjson" {
+			writeJSONError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/x-ndjson")
 			return
 		}
-		if _, err = w.Write(jResp); err != nil {
-			log.Printf("/add: %v", err)
+
+		requestStart := time.Now()
+		tasks, results, parseErr := parseBulkAppendRequest(req.Body, *bulkAppendMaxEntriesFlag)
+		if parseErr != nil {
+			writeJSONError(w, parseErr.status, parseErr.msg)
 			return
 		}
+		parseElapsed := time.Since(requestStart)
+
+		appendStart := time.Now()
+		appendBulkEntries(req.Context(), addFn, tasks, results, *bulkAppendWorkersFlag)
+		appendElapsed := time.Since(appendStart)
+
+		loggedCount, maxIndex, haveIndex := summarizeBulkAppendResults(results)
+
+		checkpointStart := time.Now()
+		// Gets the checkpoint that contains all the entries in the bulk request
+		rawCp, cp, checkpointErr := bulkAppendCheckpoint(req.Context(), logReader, v.Name(), v, haveIndex, maxIndex, *bulkAppendPublishTimeout)
+		if checkpointErr != nil {
+			writeJSONError(w, checkpointErr.status, checkpointErr.msg)
+			return
+		}
+		checkpointElapsed := time.Since(checkpointStart)
+
+		proofElapsed, ok := streamBulkAppendResponse(req.Context(), w, results, loggedCount, rawCp, cp, tileFetcher)
+		if !ok {
+			return
+		}
+
+		log.Printf(
+			"bulk append: entries=%d logged=%d parse=%s append=%s checkpoint=%s proof=%s total=%s",
+			len(results), loggedCount, parseElapsed, appendElapsed, checkpointElapsed, proofElapsed, time.Since(requestStart),
+		)
 	})
 
 	// Proxy all GET requests to the filesystem as a lightweight file server.
