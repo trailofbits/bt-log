@@ -301,7 +301,7 @@ func main() {
 		}
 
 		requestStart := time.Now()
-		tasks, results, parseErr := parseBulkAppendRequest(req.Body, *bulkAppendMaxEntriesFlag)
+		items, parseErr := parseBulkAppendRequest(req.Body, *bulkAppendMaxEntriesFlag)
 		if parseErr != nil {
 			writeJSONError(w, parseErr.status, parseErr.msg)
 			return
@@ -309,10 +309,10 @@ func main() {
 		parseElapsed := time.Since(requestStart)
 
 		appendStart := time.Now()
-		appendBulkEntries(req.Context(), addFn, tasks, results, *bulkAppendWorkersFlag)
+		appendBulkEntries(req.Context(), addFn, items, *bulkAppendWorkersFlag)
 		appendElapsed := time.Since(appendStart)
 
-		loggedCount, maxIndex, haveIndex := summarizeBulkAppendResults(results)
+		loggedCount, maxIndex, haveIndex := summarizeBulkAppendResults(items)
 
 		checkpointStart := time.Now()
 		// Gets the checkpoint that contains all the entries in the bulk request
@@ -323,14 +323,14 @@ func main() {
 		}
 		checkpointElapsed := time.Since(checkpointStart)
 
-		proofElapsed, ok := streamBulkAppendResponse(req.Context(), w, results, loggedCount, rawCp, cp, tileFetcher)
+		proofElapsed, ok := streamBulkAppendResponse(req.Context(), w, items, loggedCount, rawCp, cp, tileFetcher)
 		if !ok {
 			return
 		}
 
 		log.Printf(
 			"bulk append: entries=%d logged=%d parse=%s append=%s checkpoint=%s proof=%s total=%s",
-			len(results), loggedCount, parseElapsed, appendElapsed, checkpointElapsed, proofElapsed, time.Since(requestStart),
+			len(items), loggedCount, parseElapsed, appendElapsed, checkpointElapsed, proofElapsed, time.Since(requestStart),
 		)
 	})
 

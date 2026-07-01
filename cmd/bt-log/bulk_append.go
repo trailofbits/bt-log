@@ -33,10 +33,11 @@ type bulkAppendStreamRecord struct {
 	Count      uint64            `json:"count,omitempty"`
 }
 
-type bulkAppendTask struct {
-	pos   int
-	entry pypi.Entry
-	raw   []byte
+type bulkAppendItem struct {
+	entry  pypi.Entry
+	raw    []byte
+	result bulkAppendResult
+	valid  bool
 }
 
 type httpError struct {
@@ -66,11 +67,11 @@ func waitForTreeSize(ctx context.Context, reader tessera.LogReader, origin strin
 }
 
 // parseBulkAppendRequest reads newline-delimited PyPI entry JSON records from
-// body, validates and marshals each entry, and returns append tasks plus
-// placeholder/error results in request order.
-func parseBulkAppendRequest(body io.Reader, maxEntries uint) ([]bulkAppendTask, []bulkAppendResult, *httpError) {
-	var tasks []bulkAppendTask
-	var results []bulkAppendResult
+// body, validates and marshals each entry, and returns one item per input record
+// in request order. Invalid records carry an error result; valid records carry
+// the marshaled entry to append plus a placeholder result to fill later.
+func parseBulkAppendRequest(body io.Reader, maxEntries uint) ([]bulkAppendItem, *httpError) {
+	var items []bulkAppendItem
 	seen := map[string]struct{}{}
 	entryCount := 0
 	scanner := bufio.NewScanner(body)
@@ -82,71 +83,72 @@ func parseBulkAppendRequest(body io.Reader, maxEntries uint) ([]bulkAppendTask, 
 		}
 		entryCount++
 		if entryCount > int(maxEntries) {
-			return nil, nil, &httpError{status: http.StatusRequestEntityTooLarge, msg: fmt.Sprintf("bulk append is limited to %d entries", maxEntries)}
+			return nil, &httpError{status: http.StatusRequestEntityTooLarge, msg: fmt.Sprintf("bulk append is limited to %d entries", maxEntries)}
 		}
 		var e pypi.Entry
 		if err := json.Unmarshal(line, &e); err != nil {
-			results = append(results, bulkAppendResult{Status: "error", Error: err.Error()})
+			items = append(items, bulkAppendItem{result: bulkAppendResult{Status: "error", Error: err.Error()}})
 			continue
 		}
 		raw, err := e.Marshal()
 		if err != nil {
-			results = append(results, bulkAppendResult{Filename: e.Filename, Status: "error", Error: err.Error()})
+			items = append(items, bulkAppendItem{result: bulkAppendResult{Filename: e.Filename, Status: "error", Error: err.Error()}})
 			continue
 		}
 		if _, ok := seen[e.Filename]; ok {
-			results = append(results, bulkAppendResult{Filename: e.Filename, Status: "error", Error: "duplicate filename in request"})
+			items = append(items, bulkAppendItem{result: bulkAppendResult{Filename: e.Filename, Status: "error", Error: "duplicate filename in request"}})
 			continue
 		}
 		seen[e.Filename] = struct{}{}
-		tasks = append(tasks, bulkAppendTask{pos: len(results), entry: e, raw: raw})
-		results = append(results, bulkAppendResult{Filename: e.Filename})
+		items = append(items, bulkAppendItem{entry: e, raw: raw, result: bulkAppendResult{Filename: e.Filename}, valid: true})
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, nil, &httpError{status: http.StatusBadRequest, msg: err.Error()}
+		return nil, &httpError{status: http.StatusBadRequest, msg: err.Error()}
 	}
-	return tasks, results, nil
+	return items, nil
 }
 
-// appendBulkEntries appends to the log all valid bulk tasks using up to
-// `workerCount` concurrent workers and writes each task's logged/error result
-// into `results`.
-func appendBulkEntries(ctx context.Context, addFn tessera.AddFn, tasks []bulkAppendTask, results []bulkAppendResult, workerCount uint) {
+// appendBulkEntries appends to the log all valid bulk items using up to
+// `workerCount` concurrent workers and writes each item's logged/error result.
+func appendBulkEntries(ctx context.Context, addFn tessera.AddFn, items []bulkAppendItem, workerCount uint) {
 	var wg sync.WaitGroup
 	workers := int(workerCount)
 	if workers < 1 {
 		workers = 1
 	}
-	if workers > len(tasks) {
-		workers = len(tasks)
+	if workers > len(items) {
+		workers = len(items)
 	}
-	taskCh := make(chan bulkAppendTask)
+	itemCh := make(chan int)
 	for range workers {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for task := range taskCh {
-				f := addFn(ctx, tessera.NewEntry(task.raw))
+			for i := range itemCh {
+				f := addFn(ctx, tessera.NewEntry(items[i].raw))
 				idx, err := f()
 				if err != nil {
-					results[task.pos] = bulkAppendResult{Filename: task.entry.Filename, Status: "error", Error: err.Error()}
+					items[i].result = bulkAppendResult{Filename: items[i].entry.Filename, Status: "error", Error: err.Error()}
 					continue
 				}
-				results[task.pos] = bulkAppendResult{Filename: task.entry.Filename, Index: idx.Index, Status: "logged"}
+				items[i].result = bulkAppendResult{Filename: items[i].entry.Filename, Index: idx.Index, Status: "logged"}
 			}
 		}()
 	}
-	for _, task := range tasks {
-		taskCh <- task
+	for i := range items {
+		if items[i].valid {
+			itemCh <- i
+		}
 	}
-	close(taskCh)
+	close(itemCh)
 	wg.Wait()
 }
 
 // summarizeBulkAppendResults counts logged entries and returns the highest log
 // index observed, if any entries were successfully logged.
-func summarizeBulkAppendResults(results []bulkAppendResult) (loggedCount int, maxIndex uint64, haveIndex bool) {
-	for _, result := range results {
+func summarizeBulkAppendResults(items []bulkAppendItem) (loggedCount int, maxIndex uint64, haveIndex bool) {
+	for _, item := range items {
+		result := item.result
 		if result.Status != "logged" {
 			continue
 		}
@@ -186,7 +188,7 @@ func bulkAppendCheckpoint(ctx context.Context, reader tessera.LogReader, origin 
 // streamBulkAppendResponse writes the bulk append NDJSON response. It emits the
 // checkpoint first, then builds inclusion proofs one result at a time and streams
 // each result as soon as it is ready.
-func streamBulkAppendResponse(ctx context.Context, w http.ResponseWriter, results []bulkAppendResult, loggedCount int, rawCp []byte, cp *f_log.Checkpoint, tileFetcher client.TileFetcherFunc) (time.Duration, bool) {
+func streamBulkAppendResponse(ctx context.Context, w http.ResponseWriter, items []bulkAppendItem, loggedCount int, rawCp []byte, cp *f_log.Checkpoint, tileFetcher client.TileFetcherFunc) (time.Duration, bool) {
 	w.Header().Set("Content-Type", "application/x-ndjson")
 	enc := json.NewEncoder(w)
 	flusher, _ := w.(http.Flusher)
@@ -204,30 +206,30 @@ func streamBulkAppendResponse(ctx context.Context, w http.ResponseWriter, result
 			_ = enc.Encode(bulkAppendStreamRecord{Type: "error", Result: &bulkAppendResult{Status: "error", Error: err.Error()}})
 			return time.Since(proofStart), false
 		}
-		for i := range results {
-			if results[i].Status == "logged" {
-				inclusionProof, err := pb.InclusionProof(ctx, results[i].Index)
+		for i := range items {
+			if items[i].result.Status == "logged" {
+				inclusionProof, err := pb.InclusionProof(ctx, items[i].result.Index)
 				if err != nil {
-					results[i].Status = "error"
-					results[i].Error = err.Error()
+					items[i].result.Status = "error"
+					items[i].result.Error = err.Error()
 				} else {
-					results[i].InclusionProof = inclusionProof
+					items[i].result.InclusionProof = inclusionProof
 				}
 			}
-			_ = enc.Encode(bulkAppendStreamRecord{Type: "result", Result: &results[i]})
+			_ = enc.Encode(bulkAppendStreamRecord{Type: "result", Result: &items[i].result})
 			if flusher != nil && i%100 == 0 {
 				flusher.Flush()
 			}
 		}
 	} else {
-		for i := range results {
-			_ = enc.Encode(bulkAppendStreamRecord{Type: "result", Result: &results[i]})
+		for i := range items {
+			_ = enc.Encode(bulkAppendStreamRecord{Type: "result", Result: &items[i].result})
 			if flusher != nil && i%100 == 0 {
 				flusher.Flush()
 			}
 		}
 	}
 	proofElapsed := time.Since(proofStart)
-	_ = enc.Encode(bulkAppendStreamRecord{Type: "complete", Count: uint64(len(results))})
+	_ = enc.Encode(bulkAppendStreamRecord{Type: "complete", Count: uint64(len(items))})
 	return proofElapsed, true
 }
