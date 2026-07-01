@@ -194,12 +194,11 @@ func main() {
 	if witness != nil {
 		opts = opts.WithWitnesses(tessera.NewWitnessGroup(1, witness), &tessera.WitnessOptions{FailOpen: false})
 	}
-	appender, shutdown, r, err := tessera.NewAppender(ctx, driver, opts)
+	appender, shutdown, logReader, err := tessera.NewAppender(ctx, driver, opts)
 	if err != nil {
 		log.Fatalf("failed to create appender: %v", err)
 	}
 	addFn := appender.Add
-	logReader := r
 	tileFetcher := logReader.ReadTile
 	await := tessera.NewPublicationAwaiter(ctx, logReader.ReadCheckpoint, 200*time.Millisecond)
 
