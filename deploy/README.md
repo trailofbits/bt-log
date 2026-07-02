@@ -24,9 +24,9 @@ docker compose --env-file deploy/.env -f deploy/docker-compose.yml ...
 
 If you do not need custom values, omit `--env-file deploy/.env`.
 
-The log and witness ports are bound to `127.0.0.1` by default. This keeps `/add` reachable from the host for local ingestion, but prevents direct access from the network.
+The log and witness ports are bound to `127.0.0.1` by default. This keeps `/add` and `/admin/bulk/append` reachable from the host for local ingestion, but prevents direct access from the network.
 
-If you want to expose the log publicly, run the optional read-only proxy and expose `READONLY_PROXY_PORT` instead of `BT_LOG_PORT`. The read-only proxy blocks `/add` and proxies browser/status, checkpoint, and tile requests to the log.
+If you want to expose the log publicly, run the optional read-only proxy and expose `READONLY_PROXY_PORT` instead of `BT_LOG_PORT`. The read-only proxy blocks `/add` and `/admin/*`, and proxies browser/status, checkpoint, and tile requests to the log.
 
 Before running any backend profile, generate the log and witness keys once using the administrative commands in the backend section below. For example, with SQLite, run the SQLite administrative commands first, then start SQLite with the read-only proxy:
 
@@ -40,7 +40,7 @@ Then expose the read-only proxy port, for example:
 tailscale funnel ${READONLY_PROXY_PORT:-8088}
 ```
 
-Do not funnel `BT_LOG_PORT`, because that would expose `/add`.
+Do not funnel `BT_LOG_PORT`, because that would expose `/add` and `/admin/bulk/append`.
 
 ## SQLite
 

@@ -42,6 +42,10 @@ The HTTP server also exposes endpoints per the [C2SP tlog-tiles spec](https://gi
 * `/checkpoint`, which is updated every second
 * `/tile`, which serves the raw tile data and entry bundles
 
+For administrative backfills, the server exposes a bulk endpoint. This is intended to be protected by deployment configuration and not exposed publicly:
+
+* `POST /admin/bulk/append` accepts newline-delimited PyPI entry JSON records with `Content-Type: application/x-ndjson`, up to `--bulk-append-max-entries` records per request (default 50,000). It returns `application/x-ndjson`: a checkpoint record when available, per-file result records with log indexes and inclusion proofs for logged entries, and a completion record. If a late streaming error occurs after the response has started, it is emitted as an NDJSON error record.
+
 ## Log deployment
 
 This will create a directory in the filesystem to store a log, and start the HTTP server

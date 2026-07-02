@@ -79,6 +79,9 @@ services:
       "--private-key=/home/app/keys/private.key",
       "--witness-url=http://witness-server-sqlite:8081",
       "--witness-public-key=/home/app/keys/witness-public.key",
+      "--bulk-append-workers=${BT_LOG_BULK_APPEND_WORKERS:-8192}",
+      "--bulk-append-max-entries=${BT_LOG_BULK_APPEND_MAX_ENTRIES:-50000}",
+      "--bulk-append-publish-timeout=${BT_LOG_BULK_APPEND_PUBLISH_TIMEOUT:-30s}",
     ]
     depends_on:
       witness-server-sqlite:
@@ -127,6 +130,9 @@ services:
       "--private-key=/home/app/keys/private.key",
       "--witness-url=http://witness-server-mysql:8081",
       "--witness-public-key=/home/app/keys/witness-public.key",
+      "--bulk-append-workers=${BT_LOG_BULK_APPEND_WORKERS:-8192}",
+      "--bulk-append-max-entries=${BT_LOG_BULK_APPEND_MAX_ENTRIES:-50000}",
+      "--bulk-append-publish-timeout=${BT_LOG_BULK_APPEND_PUBLISH_TIMEOUT:-30s}",
     ]
     depends_on:
       witness-server-mysql:
@@ -190,6 +196,9 @@ services:
       "--private-key=/home/app/keys/private.key",
       "--witness-url=http://witness-server-postgres:8081",
       "--witness-public-key=/home/app/keys/witness-public.key",
+      "--bulk-append-workers=${BT_LOG_BULK_APPEND_WORKERS:-8192}",
+      "--bulk-append-max-entries=${BT_LOG_BULK_APPEND_MAX_ENTRIES:-50000}",
+      "--bulk-append-publish-timeout=${BT_LOG_BULK_APPEND_PUBLISH_TIMEOUT:-30s}",
     ]
     depends_on:
       witness-server-postgres:
