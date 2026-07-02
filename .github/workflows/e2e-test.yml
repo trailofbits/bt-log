@@ -53,6 +53,39 @@ jobs:
           index=$(cat bundle | jq -r .index)
           if [ $index -ne 0 ]; then exit 1; else true; fi
 
+      - name: Verify bulk append success
+        run: |
+          cat > bulk.ndjson <<'EOF'
+          {"checksum":"sha256:1111111111111111111111111111111111111111111111111111111111111111","filename":"pkgname-1.2.4-py3-none-any.whl"}
+          {"checksum":"sha256:2222222222222222222222222222222222222222222222222222222222222222","filename":"pkgname-1.2.5-py3-none-any.whl"}
+          EOF
+          curl -fsS -XPOST http://localhost:8080/admin/bulk/append \
+            -H "Content-Type: application/x-ndjson" \
+            --data-binary @bulk.ndjson \
+            -o bulk-response.ndjson
+          cat bulk-response.ndjson
+          jq -s -e '.[0].type == "checkpoint"' bulk-response.ndjson
+          jq -s -e '[.[] | select(.type == "result")] | length == 2' bulk-response.ndjson
+          jq -s -e '[.[] | select(.type == "result") | .result.status] == ["logged", "logged"]' bulk-response.ndjson
+          jq -s -e 'all(.[] | select(.type == "result"); (.result.index | type) == "number" and (.result.inclusionProof | type) == "array")' bulk-response.ndjson
+          jq -s -e '.[-1].type == "complete" and .[-1].count == 2' bulk-response.ndjson
+
+      - name: Verify bulk append duplicate handling
+        run: |
+          cat > bulk-duplicate.ndjson <<'EOF'
+          {"checksum":"sha256:3333333333333333333333333333333333333333333333333333333333333333","filename":"pkgname-duplicate-1.0.0-py3-none-any.whl"}
+          {"checksum":"sha256:4444444444444444444444444444444444444444444444444444444444444444","filename":"pkgname-duplicate-1.0.0-py3-none-any.whl"}
+          EOF
+          curl -fsS -XPOST http://localhost:8080/admin/bulk/append \
+            -H "Content-Type: application/x-ndjson" \
+            --data-binary @bulk-duplicate.ndjson \
+            -o bulk-duplicate-response.ndjson
+          cat bulk-duplicate-response.ndjson
+          jq -s -e '[.[] | select(.type == "result") | .result.status] == ["logged", "error"]' bulk-duplicate-response.ndjson
+          jq -s -e '([.[] | select(.type == "result")][0].result.filename) == "pkgname-duplicate-1.0.0-py3-none-any.whl"' bulk-duplicate-response.ndjson
+          jq -s -e '([.[] | select(.type == "result")][1].result.error) == "duplicate filename in request"' bulk-duplicate-response.ndjson
+          jq -s -e '.[-1].type == "complete" and .[-1].count == 2' bulk-duplicate-response.ndjson
+
       - name: Run monitor
         run: |
           go run ./cmd/bt-log-monitor --log-url http://localhost:8080 --public-key public.key --storage-dir /tmp/monitor --once=true --checksum-regex="sha256:5141b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be92" --filename-regex="pkgname" --json-logging 2>log-output
