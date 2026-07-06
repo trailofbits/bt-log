@@ -188,7 +188,7 @@ func bulkAppendCheckpoint(ctx context.Context, reader tessera.LogReader, origin 
 // streamBulkAppendResponse writes the bulk append NDJSON response. It emits the
 // checkpoint first, then builds inclusion proofs one result at a time and streams
 // each result as soon as it is ready.
-func streamBulkAppendResponse(ctx context.Context, w http.ResponseWriter, items []bulkAppendItem, loggedCount int, rawCp []byte, cp *f_log.Checkpoint, tileFetcher client.TileFetcherFunc) (time.Duration, bool) {
+func streamBulkAppendResponse(ctx context.Context, w http.ResponseWriter, items []bulkAppendItem, loggedCount int, rawCp []byte, cp *f_log.Checkpoint, tileFetcher client.TileFetcherFunc, onResult func(bulkAppendResult)) (time.Duration, bool) {
 	w.Header().Set("Content-Type", "application/x-ndjson")
 	enc := json.NewEncoder(w)
 	flusher, _ := w.(http.Flusher)
@@ -217,6 +217,9 @@ func streamBulkAppendResponse(ctx context.Context, w http.ResponseWriter, items 
 				}
 			}
 			_ = enc.Encode(bulkAppendStreamRecord{Type: "result", Result: &items[i].result})
+			if onResult != nil {
+				onResult(items[i].result)
+			}
 			if flusher != nil && i%100 == 0 {
 				flusher.Flush()
 			}
@@ -224,6 +227,9 @@ func streamBulkAppendResponse(ctx context.Context, w http.ResponseWriter, items 
 	} else {
 		for i := range items {
 			_ = enc.Encode(bulkAppendStreamRecord{Type: "result", Result: &items[i].result})
+			if onResult != nil {
+				onResult(items[i].result)
+			}
 			if flusher != nil && i%100 == 0 {
 				flusher.Flush()
 			}

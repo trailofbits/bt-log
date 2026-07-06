@@ -2,12 +2,10 @@ package main
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
-	"html/template"
 	"io"
 	"log"
 	"mime"
@@ -56,71 +54,11 @@ type LogEntryResponse struct {
 	InclusionProof [][]byte `json:"inclusionProof"`
 }
 
-type StatusPageData struct {
-	Origin              string
-	EntryType           string
-	StorageDir          string
-	WitnessConfigured   bool
-	CheckpointAvailable bool
-	TreeSize            uint64
-	RootHash            string
-	RawCheckpoint       string
-	CheckpointError     string
-	GeneratedAt         string
-}
-
 func writeJSONError(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
-
-var statusPageTmpl = template.Must(template.New("status").Parse(`<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>bt-log status</title>
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 2rem; line-height: 1.4; max-width: 900px; }
-    table { border-collapse: collapse; margin: 1rem 0; }
-    th { text-align: left; padding-right: 1.5rem; }
-    th, td { padding-top: 0.35rem; padding-bottom: 0.35rem; vertical-align: top; }
-    code, pre { background: #f6f8fa; border-radius: 6px; }
-    code { padding: 0.1rem 0.3rem; }
-    pre { padding: 1rem; overflow-x: auto; }
-  </style>
-</head>
-<body>
-  <h1>bt-log status</h1>
-  <table>
-    <tr><th>Origin</th><td><code>{{.Origin}}</code></td></tr>
-    <tr><th>Entry type</th><td><code>{{.EntryType}}</code></td></tr>
-    <tr><th>Storage directory</th><td><code>{{.StorageDir}}</code></td></tr>
-    <tr><th>Witness</th><td>{{if .WitnessConfigured}}configured{{else}}not configured{{end}}</td></tr>
-    <tr><th>Generated at</th><td>{{.GeneratedAt}}</td></tr>
-  </table>
-
-  <h2>Checkpoint</h2>
-  {{if .CheckpointAvailable}}
-  <table>
-    <tr><th>Tree size</th><td>{{.TreeSize}}</td></tr>
-    <tr><th>Root hash</th><td><code>{{.RootHash}}</code></td></tr>
-  </table>
-  <pre>{{.RawCheckpoint}}</pre>
-  {{else}}
-  <p>No checkpoint is available yet.</p>
-  {{if .CheckpointError}}<p><strong>Error:</strong> <code>{{.CheckpointError}}</code></p>{{end}}
-  {{end}}
-
-  <h2>Links</h2>
-  <ul>
-    <li><a href="/.well-known/public-key">/.well-known/public-key</a></li>
-    <li><a href="/checkpoint">/checkpoint</a></li>
-    <li><a href="/tile/">/tile/</a></li>
-  </ul>
-</body>
-</html>`))
 
 func main() {
 	flag.Parse()
@@ -201,40 +139,18 @@ func main() {
 	addFn := appender.Add
 	tileFetcher := logReader.ReadTile
 	await := tessera.NewPublicationAwaiter(ctx, logReader.ReadCheckpoint, 200*time.Millisecond)
-
-	http.HandleFunc("GET /", func(w http.ResponseWriter, req *http.Request) {
-		if req.URL.Path != "/" {
-			http.NotFound(w, req)
-			return
-		}
-
-		data := StatusPageData{
-			Origin:            v.Name(),
-			EntryType:         pypi.EntryType,
-			StorageDir:        *storageDir,
-			WitnessConfigured: witness != nil,
-			GeneratedAt:       time.Now().UTC().Format(time.RFC3339),
-		}
-
-		rawCp, err := logReader.ReadCheckpoint(req.Context())
-		if err != nil {
-			data.CheckpointError = err.Error()
-		} else {
-			cp, _, _, err := f_log.ParseCheckpoint(rawCp, v.Name(), v)
-			if err != nil {
-				data.CheckpointError = err.Error()
-			} else {
-				data.CheckpointAvailable = true
-				data.TreeSize = cp.Size
-				data.RootHash = hex.EncodeToString(cp.Hash)
-				data.RawCheckpoint = string(rawCp)
-			}
-		}
-
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := statusPageTmpl.Execute(w, data); err != nil {
-			log.Printf("status page: %v", err)
-		}
+	addLatency := newLatencyTracker()
+	bulkLatency := newLatencyTracker()
+	registerStatusHandlers(&statusConfig{
+		Origin:            v.Name(),
+		EntryType:         pypi.EntryType,
+		StorageDir:        *storageDir,
+		WitnessConfigured: witness != nil,
+		LogReader:         logReader,
+		Verifier:          v,
+		Latency:           addLatency,
+		BulkLatency:       bulkLatency,
+		DiskCache:         newDiskUsageCache(1 * time.Minute),
 	})
 
 	http.HandleFunc("GET /.well-known/public-key", func(w http.ResponseWriter, r *http.Request) {
@@ -244,6 +160,10 @@ func main() {
 
 	// Define a handler for /add that accepts POST requests and adds the POST body to the log.
 	http.HandleFunc("POST /add", func(w http.ResponseWriter, r *http.Request) {
+		requestStart := time.Now()
+		success := false
+		defer func() { addLatency.finish(requestStart, success) }()
+
 		b, err := io.ReadAll(r.Body)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, err.Error())
@@ -290,17 +210,23 @@ func main() {
 			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		_ = json.NewEncoder(w).Encode(LogEntryResponse{Index: idx.Index, InclusionProof: inclusionProof, Checkpoint: rawCp})
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(LogEntryResponse{Index: idx.Index, InclusionProof: inclusionProof, Checkpoint: rawCp}); err != nil {
+			log.Printf("encode add response: %v", err)
+			return
+		}
+		success = true
 	})
 
 	http.HandleFunc("POST /admin/bulk/append", func(w http.ResponseWriter, req *http.Request) {
+		requestStart := time.Now()
+
 		contentType, _, err := mime.ParseMediaType(req.Header.Get("Content-Type"))
 		if err != nil || contentType != "application/x-ndjson" {
 			writeJSONError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/x-ndjson")
 			return
 		}
 
-		requestStart := time.Now()
 		items, parseErr := parseBulkAppendRequest(req.Body, *bulkAppendMaxEntriesFlag)
 		if parseErr != nil {
 			writeJSONError(w, parseErr.status, parseErr.msg)
@@ -318,15 +244,27 @@ func main() {
 		// Gets the checkpoint that contains all the entries in the bulk request
 		rawCp, cp, checkpointErr := bulkAppendCheckpoint(req.Context(), logReader, v.Name(), v, haveIndex, maxIndex, *bulkAppendPublishTimeout)
 		if checkpointErr != nil {
+			bulkLatency.addFailures(uint64(loggedCount))
 			writeJSONError(w, checkpointErr.status, checkpointErr.msg)
 			return
 		}
 		checkpointElapsed := time.Since(checkpointStart)
 
-		proofElapsed, ok := streamBulkAppendResponse(req.Context(), w, items, loggedCount, rawCp, cp, tileFetcher)
+		var bulkBatch latencyBatch
+		proofElapsed, ok := streamBulkAppendResponse(req.Context(), w, items, loggedCount, rawCp, cp, tileFetcher, func(result bulkAppendResult) {
+			if result.Status == "logged" {
+				bulkBatch.observe(time.Since(requestStart))
+			} else {
+				bulkBatch.addFailure()
+			}
+		})
 		if !ok {
+			bulkLatency.addFailures(uint64(loggedCount))
 			return
 		}
+		bulkBatch.throughputEntries = uint64(loggedCount)
+		bulkBatch.throughputDuration = time.Since(requestStart)
+		bulkLatency.observeBatch(bulkBatch)
 
 		log.Printf(
 			"bulk append: entries=%d logged=%d parse=%s append=%s checkpoint=%s proof=%s total=%s",
