@@ -14,7 +14,7 @@ Docker Compose values can be customized by copying `deploy/.env.example` to `dep
 cp deploy/.env.example deploy/.env
 ```
 
-The most important values to customize are `LOG_ORIGIN` and `WITNESS_ORIGIN`, because they become part of the signed log and witness identities. You can also customize `BT_LOG_PORT`, `WITNESS_PORT`, and the optional read-only proxy settings.
+The most important values to customize are `LOG_ORIGIN` and `WITNESS_ORIGIN`, because they become part of the signed log and witness identities. You can also customize `BT_LOG_PORT`, `WITNESS_PORT`, `READONLY_PROXY_LOCAL_PORT`, and `READONLY_PROXY_SITE`.
 
 Use this Compose invocation throughout:
 
@@ -26,7 +26,9 @@ If you do not need custom values, omit `--env-file deploy/.env`.
 
 The log and witness ports are bound to `127.0.0.1` by default. This keeps `/add` and `/admin/bulk/append` reachable from the host for local ingestion, but prevents direct access from the network.
 
-If you want to expose the log publicly, run the optional read-only proxy and expose `READONLY_PROXY_PORT` instead of `BT_LOG_PORT`. The read-only proxy blocks `/add` and `/admin/*`, and proxies browser/status, checkpoint, and tile requests to the log.
+If you want to expose the log publicly, run the optional read-only proxy instead of exposing `BT_LOG_PORT`. The read-only proxy blocks `/add` and `/admin/*`, and proxies browser/status, checkpoint, and tile requests to the log. Caddy certificate state is stored in Docker volumes so automatically issued certificates survive container recreation.
+
+For direct public HTTPS on a domain, set `READONLY_PROXY_SITE` to the domain name, point DNS at the host, and publish container ports 80 and 443 for the read-only proxy with a local Compose override. Do not publish `BT_LOG_PORT`, because that exposes `/add` and `/admin/bulk/append`.
 
 Before running any backend profile, generate the log and witness keys once using the administrative commands in the backend section below. For example, with SQLite, run the SQLite administrative commands first, then start SQLite with the read-only proxy:
 
@@ -37,7 +39,7 @@ docker compose --env-file deploy/.env -f deploy/docker-compose.yml --profile sql
 Then expose the read-only proxy port, for example:
 
 ```shell
-tailscale funnel ${READONLY_PROXY_PORT:-8088}
+tailscale funnel ${READONLY_PROXY_LOCAL_PORT:-8088}
 ```
 
 Do not funnel `BT_LOG_PORT`, because that would expose `/add` and `/admin/bulk/append`.

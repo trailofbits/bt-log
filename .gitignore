@@ -3,3 +3,4 @@
 witness.db
 bundle
 log-output
+deploy/.env

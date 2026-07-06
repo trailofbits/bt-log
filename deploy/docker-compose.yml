@@ -59,11 +59,14 @@ services:
     profiles: [readonly-proxy]
     image: caddy:2
     ports:
-      - "127.0.0.1:${READONLY_PROXY_PORT:-8088}:8088"
+      - "127.0.0.1:${READONLY_PROXY_LOCAL_PORT:-8088}:8088"
     environment:
       BT_LOG_UPSTREAM: ${BT_LOG_UPSTREAM:-bt-log-sqlite:8080}
+      READONLY_PROXY_SITE: ${READONLY_PROXY_SITE:-:8088}
     volumes:
       - ./Caddyfile.readonly:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
     restart: always
 
   # --- SQLite Profile ---
@@ -261,3 +264,7 @@ volumes:
   mysql-data:
   # Stores witness database in postgres
   postgres-data:
+  # Stores Caddy certificates and runtime data
+  caddy-data:
+  # Stores Caddy configuration state
+  caddy-config:

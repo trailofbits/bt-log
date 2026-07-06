@@ -1,4 +1,4 @@
-:8088 {
+{$READONLY_PROXY_SITE::8088} {
 	@write path /add /admin /admin/*
 	respond @write 403
 
