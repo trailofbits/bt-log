@@ -55,22 +55,24 @@
   <table>
     <tr><th>Origin</th><td><code>{{.Origin}}</code></td></tr>
     <tr><th>Entry type</th><td><code>{{.EntryType}}</code></td></tr>
+    <tr><th>Number of entries</th><td id="entryCount">{{if .Checkpoint.Available}}{{.Checkpoint.TreeSize}}{{else}}—{{end}}</td></tr>
     <tr><th>Storage directory</th><td><code>{{.StorageDir}}</code></td></tr>
     <tr><th>Witness</th><td>{{if .WitnessConfigured}}configured{{else}}not configured{{end}}</td></tr>
     <tr><th>Updated</th><td id="generatedAt">{{.GeneratedAt}}</td></tr>
   </table>
 
-  <h2>Checkpoint</h2>
-  {{if .Checkpoint.Available}}
-  <table>
-    <tr><th>Root hash</th><td><code id="rootHash">{{.Checkpoint.RootHash}}</code></td></tr>
-  </table>
-  <pre id="checkpoint">{{.Checkpoint.RawCheckpoint}}</pre>
-  {{else}}
-  <p>No checkpoint is available yet.</p>
-  {{if .Checkpoint.Error}}<p><strong>Error:</strong> <code>{{.Checkpoint.Error}}</code></p>{{end}}
-  {{end}}
-
+  <details class="stats-panel">
+    <summary>Checkpoint</summary>
+    {{if .Checkpoint.Available}}
+    <table>
+      <tr><th>Root hash</th><td><code id="rootHash">{{.Checkpoint.RootHash}}</code></td></tr>
+    </table>
+    <pre id="checkpoint">{{.Checkpoint.RawCheckpoint}}</pre>
+    {{else}}
+    <p id="checkpoint">No checkpoint is available yet.</p>
+    {{if .Checkpoint.Error}}<p><strong>Error:</strong> <code>{{.Checkpoint.Error}}</code></p>{{end}}
+    {{end}}
+  </details>
 
   <details class="stats-panel">
     <summary>Live statistics</summary>
@@ -144,6 +146,7 @@ async function refresh() {
   const res = await fetch("/status.json", {cache: "no-store"});
   const s = await res.json();
   setText("generatedAt", s.generated_at);
+  setText("entryCount", s.checkpoint.available ? s.checkpoint.tree_size : "—");
   setText("latencyAvg", fmtMs(s.latency.average_ms));
   setText("latencyLast", fmtMs(s.latency.last_ms));
   setText("latencyMinMax", fmtMs(s.latency.min_ms) + " / " + fmtMs(s.latency.max_ms));
