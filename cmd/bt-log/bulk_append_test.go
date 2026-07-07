@@ -183,7 +183,7 @@ func TestStreamBulkAppendResponse(t *testing.T) {
 		_, ok := streamBulkAppendResponse(context.Background(), w, items, 0, rawCp, cp, func(ctx context.Context, level, index uint64, p uint8) ([]byte, error) {
 			tileFetcherCalled = true
 			return nil, errors.New("tile fetcher should not be called")
-		})
+		}, nil)
 		if !ok {
 			t.Fatal("ok = false, want true")
 		}
@@ -236,7 +236,7 @@ func TestStreamBulkAppendResponse(t *testing.T) {
 	t.Run("all invalid entries without existing checkpoint streams results and complete", func(t *testing.T) {
 		items := []bulkAppendItem{{result: bulkAppendResult{Filename: "bad.whl", Status: "error", Error: "filename empty"}}}
 		w := httptest.NewRecorder()
-		_, ok := streamBulkAppendResponse(context.Background(), w, items, 0, nil, nil, nil)
+		_, ok := streamBulkAppendResponse(context.Background(), w, items, 0, nil, nil, nil, nil)
 		if !ok {
 			t.Fatal("ok = false, want true")
 		}
