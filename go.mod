@@ -7,7 +7,7 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/transparency-dev/formats v0.1.1
 	github.com/transparency-dev/merkle v0.0.2
-	github.com/transparency-dev/tessera v1.0.2
+	github.com/transparency-dev/tessera v1.0.4
 	golang.org/x/mod v0.38.0
 	modernc.org/sqlite v1.53.0
 )
