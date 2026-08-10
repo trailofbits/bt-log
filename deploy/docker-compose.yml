@@ -158,7 +158,7 @@ services:
         condition: service_completed_successfully
   mysql:
     profiles: [mysql]
-    image: mysql:9.7.1
+    image: mysql:26.7.0
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
