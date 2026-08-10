@@ -168,9 +168,10 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
-      test: "mysqladmin -h 127.0.0.1 --user=$$MYSQL_USER --password=$$MYSQL_ROOT_PASSWORD -s ping"
+      test: "mysqladmin -h 127.0.0.1 --user=$$MYSQL_USER --password=$$MYSQL_PASSWORD -s ping"
       interval: 2s
       timeout: 10s
+      start_period: 30s
       retries: 5
   init-witness-mysql:
     profiles: [mysql]
