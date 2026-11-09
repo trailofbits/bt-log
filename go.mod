@@ -9,7 +9,7 @@ require (
 	github.com/transparency-dev/merkle v0.0.2
 	github.com/transparency-dev/tessera v1.0.4
 	golang.org/x/mod v0.42.0
-	modernc.org/sqlite v1.61.0
+	modernc.org/sqlite v1.61.1
 )
 
 require (
